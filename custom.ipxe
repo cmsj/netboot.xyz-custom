@@ -1,12 +1,122 @@
 #!ipxe
-###
-### netboot.xyz-custom menu
-###
 
-:start
-echo Hello world!
-sleep 10
-goto custom_exit
+set site_name chrulboot
+set timeout 3600000
+set boot_domain 10.0.88.10:3001
+set base_url http://${boot_domain}/chrulboot
+set memdisk ${base_url}/memdisk
 
-:custom_exit
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+
+isset ${ip} || dhcp || echo DHCP failed
+
+:main_menu
+clear menu
+set space:hex 20:20
+set space ${space:string}
+menu ${site_name}
+item --gap Default:
+item local ${space} Boot from local disk
+item --gap Installers:
+item inst_linux_ubuntu ${space} Ubuntu
+item --gap Live:
+item live_linux_debian_default ${space} Debian CLI (u:live/p:live)
+item live_linux_debian_gnome ${space} Debian GNOME
+item --gap Utilities:
+item util_gparted ${space} GParted
+item util_memtest ${space} Memtest86+
+item util_dban ${space} DBAN
+item util_clonezilla ${space} Clonezilla
+item --gap Other:
+item shell ${space} iPXE Shell
+item netinfo ${space} Network Info
+choose --timeout ${timeout} --default ${menu} menu || goto local
+echo ${cls}
+goto ${menu}
+
+:local
+echo Booting from local disks...
 exit 0
+
+:shell
+echo Type "exit" to return to menu.
+set menu main_menu
+shell
+goto main_menu
+
+:netinfo
+menu Network Info
+item --gap MAC:
+item mac ${space} ${netX/mac}
+item --gap IP/mask:
+item ip ${space} ${netX/ip}/${netX/netmask}
+item --gap Gateway:
+item gw ${space} ${netX/gateway}
+item --gap Domain:
+item domain ${space} ${netX/domain}
+item --gap DNS:
+item dns ${space} ${netX/dns}
+item --gap DHCP Server:
+item dhcpserver ${space} ${netX/dhcp-server}
+item --gap Next Server:
+item nextserver ${space} ${next-server}
+item --gap Filename:
+item filename ${space} ${netX/filename}
+choose empty ||
+goto main_menu
+
+:boot_memdisk
+imgfree
+kernel ${memdisk} iso raw
+initrd --name ${iso_name} ${base_url}/iso/${iso_name}
+boot
+goto main_menu
+
+:util_clonezilla
+set iso_name clonezilla.iso
+goto boot_memdisk
+
+:util_dban
+set iso_name dban.iso
+goto boot_memdisk
+
+:util_memtest
+set iso_name memtest86+.iso
+goto boot_memdisk
+
+:util_gparted
+set iso_name gparted.iso
+goto boot_memdisk
+
+:live_linux_debian_default
+set flavor standard
+goto live_linux_debian
+
+:live_linux_debian_gnome
+set flavor gnome-desktop
+goto live_linux_debian
+
+:live_linux_debian
+set livedebian_version 8.11.0
+set webboot_host cdimage.debian.org
+set livedebian_url http://${webboot_host}/cdimage/archive/${livedebian_version}-live/amd64/webboot/debian-live-${livedebian_version}-amd64-${flavor}
+imgfree
+kernel ${livedebian_url}.vmlinuz boot=live config hooks=filesystem username=live noeject ${console} fetch=${livedebian_url}.squashfs initrd=debian-live-${livedebian_version}-amd64-${flavor}.initrd.img
+module ${livedebian_url}.initrd.img
+# hack to resolve DNS
+module ${base_url}/live-helpers/debian/libresolv.so.2 /lib/libresolv.so.2
+module ${base_url}/live-helpers/debian/libnss_dns.so.2 /lib/libnss_dns.so.2
+boot
+goto main_menu
+
+:inst_linux_ubuntu
+set instubuntu_version bionic
+set webboot_host archive.ubuntu.com
+set instubuntu_url http://${webboot_host}/ubuntu/dists/${instubuntu_version}-updates/main/installer-amd64/current/images/netboot/ubuntu-installer/amd64/
+imgfree
+kernel ${instubuntu_url}/linux vga=788 initrd=${instubuntu_url}/initrd.gz --- quiet
+module ${instubuntu_url}/initrd.gz
+boot
+
+
